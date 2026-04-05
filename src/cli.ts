@@ -7,6 +7,7 @@ import { syncBookmarksGraphQL } from './graphql-bookmarks.js';
 import type { SyncProgress } from './graphql-bookmarks.js';
 import { syncLikesGraphQL } from './graphql-likes.js';
 import { fetchBookmarkMediaBatch } from './bookmark-media.js';
+import { exportToMarkdown } from './export-md.js';
 import {
   buildIndex,
   searchBookmarks,
@@ -689,6 +690,33 @@ export function buildCli() {
         maxBytes: Number(options.maxBytes) || 50 * 1024 * 1024,
       });
       console.log(JSON.stringify(result, null, 2));
+    }));
+
+  // ── export-md ───────────────────────────────────────────────────────────
+
+  program
+    .command('export-md')
+    .description('Export bookmarks/likes to Markdown files (for NotebookLM, Obsidian, etc.)')
+    .option('--source <source>', 'Source to export: bookmarks, likes, or all', 'all')
+    .option('--batch-size <n>', 'Max tweets per Markdown file', (v: string) => Number(v), 200)
+    .option('--out-dir <path>', 'Output directory', process.cwd())
+    .action(safe(async (options) => {
+      if (!requireData()) return;
+      const source = ['bookmarks', 'likes', 'all'].includes(options.source) ? options.source : 'all';
+      const result = await exportToMarkdown({
+        source,
+        batchSize: Number(options.batchSize) || 200,
+        outDir: options.outDir ? String(options.outDir) : undefined,
+      });
+      if (result.totalRecords === 0) {
+        console.log('  No records to export. Run: ft sync or ft sync-likes');
+        return;
+      }
+      console.log(`  \u2713 Exported ${result.totalRecords} tweets to ${result.files.length} file(s):`);
+      for (const f of result.files) {
+        console.log(`    ${f}`);
+      }
+      console.log(`\n  Upload these files to NotebookLM, Obsidian, or any Markdown-compatible tool.`);
     }));
 
   // ── hidden backward-compat aliases ────────────────────────────────────
