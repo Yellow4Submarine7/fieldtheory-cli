@@ -1,7 +1,7 @@
 import type { Database } from 'sql.js';
 import { openDb, saveDb } from './db.js';
 import { readJsonLines } from './fs.js';
-import { twitterBookmarksCachePath, twitterBookmarksIndexPath } from './paths.js';
+import { twitterBookmarksCachePath, twitterBookmarksIndexPath, twitterLikesCachePath } from './paths.js';
 import type { BookmarkRecord } from './types.js';
 import { classifyCorpus, formatClassificationSummary } from './bookmark-classify.js';
 import type { ClassificationSummary } from './bookmark-classify.js';
@@ -278,8 +278,11 @@ function insertRecord(db: Database, r: BookmarkRecord): void {
 
 export async function buildIndex(options?: { force?: boolean }): Promise<{ dbPath: string; recordCount: number; newRecords: number }> {
   const cachePath = twitterBookmarksCachePath();
+  const likesCachePath = twitterLikesCachePath();
   const dbPath = twitterBookmarksIndexPath();
-  const records = await readJsonLines<BookmarkRecord>(cachePath);
+  const bookmarkRecords = await readJsonLines<BookmarkRecord>(cachePath);
+  const likesRecords = await readJsonLines<BookmarkRecord>(likesCachePath);
+  const records = [...bookmarkRecords, ...likesRecords];
 
   const db = await openDb(dbPath);
   try {

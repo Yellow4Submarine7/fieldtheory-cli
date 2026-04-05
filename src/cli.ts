@@ -5,6 +5,7 @@ import { getBookmarkStatusView, formatBookmarkStatus } from './bookmarks-service
 import { runTwitterOAuthFlow } from './xauth.js';
 import { syncBookmarksGraphQL } from './graphql-bookmarks.js';
 import type { SyncProgress } from './graphql-bookmarks.js';
+import { syncLikesGraphQL } from './graphql-likes.js';
 import { fetchBookmarkMediaBatch } from './bookmark-media.js';
 import {
   buildIndex,
@@ -305,6 +306,87 @@ export function buildCli() {
 
   If you use multiple Chrome profiles, specify which one:
     ft sync --chrome-profile-directory "Profile 1"
+`);
+        } else {
+          console.error(`\n  Error: ${msg}\n`);
+        }
+        process.exitCode = 1;
+      }
+    });
+
+  // ── sync-likes ──────────────────────────────────────────────────────────
+
+  program
+    .command('sync-likes')
+    .description('Sync liked tweets from X into your local database')
+    .option('--full', 'Full crawl instead of incremental sync', false)
+    .option('--classify', 'Classify new likes with LLM after syncing', false)
+    .option('--max-pages <n>', 'Max pages to fetch', (v: string) => Number(v), 500)
+    .option('--target-adds <n>', 'Stop after N new likes', (v: string) => Number(v))
+    .option('--delay-ms <n>', 'Delay between requests in ms', (v: string) => Number(v), 600)
+    .option('--max-minutes <n>', 'Max runtime in minutes', (v: string) => Number(v), 30)
+    .option('--user-id <id>', 'Twitter user ID (auto-detected from Chrome cookies if omitted)')
+    .option('--chrome-user-data-dir <path>', 'Chrome user-data directory')
+    .option('--chrome-profile-directory <name>', 'Chrome profile name')
+    .action(async (options) => {
+      const firstRun = isFirstRun();
+      if (firstRun) showSyncWelcome();
+      ensureDataDir();
+
+      try {
+        const startTime = Date.now();
+        const result = await syncLikesGraphQL({
+          incremental: !Boolean(options.full),
+          maxPages: Number(options.maxPages) || 500,
+          targetAdds: typeof options.targetAdds === 'number' && !Number.isNaN(options.targetAdds) ? options.targetAdds : undefined,
+          delayMs: Number(options.delayMs) || 600,
+          maxMinutes: Number(options.maxMinutes) || 30,
+          userId: options.userId ? String(options.userId) : undefined,
+          chromeUserDataDir: options.chromeUserDataDir ? String(options.chromeUserDataDir) : undefined,
+          chromeProfileDirectory: options.chromeProfileDirectory ? String(options.chromeProfileDirectory) : undefined,
+          onProgress: (status: SyncProgress) => {
+            const elapsed = Math.round((Date.now() - startTime) / 1000);
+            const spin = SPINNER[spinnerIdx++ % SPINNER.length];
+            const line = `  ${spin} Syncing likes...  ${status.newAdded} new  \u2502  page ${status.page}  \u2502  ${elapsed}s`;
+            process.stderr.write(`\r\x1b[K${line}`);
+            if (status.done) process.stderr.write('\n');
+          },
+        });
+
+        const LIKES_STOP_REASONS: Record<string, string> = {
+          'caught up to newest stored like': 'All caught up \u2014 no new likes since last sync.',
+          'no new likes (stale)': 'Sync complete \u2014 reached the end of new likes.',
+          'end of likes': 'Sync complete \u2014 all likes fetched.',
+          'max runtime reached': 'Paused after 30 minutes. Run again to continue.',
+          'max pages reached': 'Paused after reaching page limit. Run again to continue.',
+          'target additions reached': 'Reached target like count.',
+        };
+
+        console.log(`\n  \u2713 ${result.added} new likes synced (${result.totalBookmarks} total)`);
+        console.log(`  ${LIKES_STOP_REASONS[result.stopReason] ?? `Sync complete \u2014 ${result.stopReason}`}`);
+        console.log(`  \u2713 Data: ${dataDir()}\n`);
+
+        const newCount = await rebuildIndex(result.added);
+        if (options.classify && newCount > 0) {
+          await classifyNew();
+        }
+      } catch (err) {
+        const msg = (err as Error).message;
+        if (msg.includes('cookie') || msg.includes('Cookie') || msg.includes('Keychain')) {
+          console.log(`
+  Couldn't connect to your Chrome session.
+
+  To sync your likes:
+
+    1. Open Google Chrome
+    2. Go to x.com and make sure you're logged in
+    3. Run: ft sync-likes
+
+  If you use multiple Chrome profiles, specify which one:
+    ft sync-likes --chrome-profile-directory "Profile 1"
+
+  If user ID can't be auto-detected, pass it explicitly:
+    ft sync-likes --user-id YOUR_USER_ID
 `);
         } else {
           console.error(`\n  Error: ${msg}\n`);

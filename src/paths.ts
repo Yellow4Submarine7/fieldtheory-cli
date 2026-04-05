@@ -36,6 +36,14 @@ export function twitterBackfillStatePath(): string {
   return path.join(dataDir(), 'bookmarks-backfill-state.json');
 }
 
+export function twitterLikesCachePath(): string {
+  return path.join(dataDir(), 'likes.jsonl');
+}
+
+export function twitterLikesBackfillStatePath(): string {
+  return path.join(dataDir(), 'likes-backfill-state.json');
+}
+
 export function bookmarkMediaDir(): string {
   return path.join(dataDir(), 'media');
 }
