@@ -71,6 +71,17 @@ ft export-md --source bookmarks --batch-size 100 --out-dir ./export
 
 Each Markdown file contains up to 200 tweets (configurable via `--batch-size`), formatted with author, date, text, links, and engagement stats. NotebookLM supports up to 50 sources per notebook, so for large collections, use a larger batch size.
 
+### Incremental export
+
+Use `--since` to export only records synced after a given date — useful for daily automation:
+
+```bash
+# Export only likes synced after a specific date
+ft export-md --source likes --since 2026-04-06T00:00:00Z --out-dir ./new-likes
+```
+
+When `--since` is provided, output files are named with the current date (e.g. `likes-2026-04-07.md`) instead of sequential numbers, making them safe to accumulate without overwriting.
+
 ## Commands
 
 | Command | Description |
@@ -91,6 +102,7 @@ Each Markdown file contains up to 200 tweets (configurable via `--batch-size`), 
 | `ft show <id>` | Show one bookmark in detail |
 | `ft index` | Merge new bookmarks into search index (preserves classifications) |
 | `ft export-md` | Export to Markdown files (for NotebookLM, Obsidian, etc.) |
+| `ft export-md --since <date>` | Incremental export (only records synced after date) |
 | `ft auth` | Set up OAuth for API-based sync (optional) |
 | `ft sync --api` | Sync via OAuth API (cross-platform) |
 | `ft fetch-media` | Download media assets (static images only) |
@@ -118,6 +130,22 @@ Works with Claude Code, Codex, or any agent with shell access. Just tell your ag
 # Sync and classify every morning
 0 7 * * * ft sync --classify
 ```
+
+### Daily likes → NotebookLM pipeline
+
+A bundled `daily-sync.sh` script can sync new likes, export them incrementally, and upload to NotebookLM automatically:
+
+```bash
+# Install the script
+cp scripts/daily-sync.sh ~/.ft-bookmarks/daily-sync.sh
+chmod +x ~/.ft-bookmarks/daily-sync.sh
+
+# Register as a macOS LaunchAgent (runs daily at 11am local time)
+cp scripts/com.ft.daily-sync.plist ~/Library/LaunchAgents/
+launchctl load ~/Library/LaunchAgents/com.ft.daily-sync.plist
+```
+
+Requires [`notebooklm-py`](https://github.com/nicholasgasior/notebooklm-py) and [`terminal-notifier`](https://github.com/julienXX/terminal-notifier) for uploads and desktop notifications. Logs are written to `~/.ft-bookmarks/sync.log`.
 
 ## Data
 

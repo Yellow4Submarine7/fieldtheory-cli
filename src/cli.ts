@@ -700,13 +700,16 @@ export function buildCli() {
     .option('--source <source>', 'Source to export: bookmarks, likes, or all', 'all')
     .option('--batch-size <n>', 'Max tweets per Markdown file', (v: string) => Number(v), 200)
     .option('--out-dir <path>', 'Output directory', process.cwd())
+    .option('--since <date>', 'Only export records synced after this date (ISO format, e.g. 2026-04-05)')
     .action(safe(async (options) => {
-      if (!requireData()) return;
       const source = ['bookmarks', 'likes', 'all'].includes(options.source) ? options.source : 'all';
+      // Only require bookmarks data if not exporting likes-only
+      if (source !== 'likes' && !requireData()) return;
       const result = await exportToMarkdown({
         source,
         batchSize: Number(options.batchSize) || 200,
         outDir: options.outDir ? String(options.outDir) : undefined,
+        since: options.since ? String(options.since) : undefined,
       });
       if (result.totalRecords === 0) {
         console.log('  No records to export. Run: ft sync or ft sync-likes');
