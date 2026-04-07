@@ -29,6 +29,59 @@ ft stats
 
 On first run, `ft sync` extracts your X session from Chrome and downloads your bookmarks into `~/.ft-bookmarks/`.
 
+## Sync liked tweets
+
+If you use likes as your primary way to save tweets, use `ft sync-likes`:
+
+```bash
+# Sync your liked tweets (auto-detects user ID from Chrome cookies)
+ft sync-likes
+
+# Explicitly pass your Twitter user ID
+ft sync-likes --user-id 123456789
+
+# Full crawl, then classify
+ft sync-likes --full --classify
+```
+
+Liked tweets are stored in `~/.ft-bookmarks/likes.jsonl` and indexed into the same search database as bookmarks, so `ft search`, `ft classify`, `ft viz`, and all other commands work on both.
+
+The Likes API query ID may change over time. If sync fails, set a new one via:
+
+```bash
+export FT_LIKES_QUERY_ID=newQueryIdHere
+```
+
+## Export to Markdown
+
+Export your bookmarks and/or likes to Markdown files for use with NotebookLM, Obsidian, or any Markdown-compatible tool:
+
+```bash
+# Export everything (bookmarks + likes) to current directory
+ft export-md
+
+# Export only likes
+ft export-md --source likes
+
+# Export only bookmarks, 100 tweets per file, to a specific directory
+ft export-md --source bookmarks --batch-size 100 --out-dir ./export
+
+# Then upload the .md files to NotebookLM or drag into Obsidian
+```
+
+Each Markdown file contains up to 200 tweets (configurable via `--batch-size`), formatted with author, date, text, links, and engagement stats. NotebookLM supports up to 50 sources per notebook, so for large collections, use a larger batch size.
+
+### Incremental export
+
+Use `--since` to export only records synced after a given date — useful for daily automation:
+
+```bash
+# Export only likes synced after a specific date
+ft export-md --source likes --since 2026-04-06T00:00:00Z --out-dir ./new-likes
+```
+
+When `--since` is provided, output files are named with the current date (e.g. `likes-2026-04-07.md`) instead of sequential numbers, making them safe to accumulate without overwriting.
+
 ## Commands
 
 | Command | Description |
@@ -36,6 +89,8 @@ On first run, `ft sync` extracts your X session from Chrome and downloads your b
 | `ft sync` | Download and sync all bookmarks (no API required) |
 | `ft sync --classify` | Sync then classify new bookmarks with LLM |
 | `ft sync --full` | Full history crawl (not just incremental) |
+| `ft sync-likes` | Download and sync your liked tweets |
+| `ft sync-likes --user-id <id>` | Sync likes with explicit Twitter user ID |
 | `ft search <query>` | Full-text search with BM25 ranking |
 | `ft viz` | Terminal dashboard with sparklines, categories, and domains |
 | `ft classify` | Classify by category and domain using LLM |
@@ -46,6 +101,8 @@ On first run, `ft sync` extracts your X session from Chrome and downloads your b
 | `ft list` | Filter by author, date, category, domain |
 | `ft show <id>` | Show one bookmark in detail |
 | `ft index` | Merge new bookmarks into search index (preserves classifications) |
+| `ft export-md` | Export to Markdown files (for NotebookLM, Obsidian, etc.) |
+| `ft export-md --since <date>` | Incremental export (only records synced after date) |
 | `ft auth` | Set up OAuth for API-based sync (optional) |
 | `ft sync --api` | Sync via OAuth API (cross-platform) |
 | `ft fetch-media` | Download media assets (static images only) |
@@ -74,6 +131,22 @@ Works with Claude Code, Codex, or any agent with shell access. Just tell your ag
 0 7 * * * ft sync --classify
 ```
 
+### Daily likes → NotebookLM pipeline
+
+A bundled `daily-sync.sh` script can sync new likes, export them incrementally, and upload to NotebookLM automatically:
+
+```bash
+# Install the script
+cp scripts/daily-sync.sh ~/.ft-bookmarks/daily-sync.sh
+chmod +x ~/.ft-bookmarks/daily-sync.sh
+
+# Register as a macOS LaunchAgent (runs daily at 11am local time)
+cp scripts/com.ft.daily-sync.plist ~/Library/LaunchAgents/
+launchctl load ~/Library/LaunchAgents/com.ft.daily-sync.plist
+```
+
+Requires [`notebooklm-py`](https://github.com/nicholasgasior/notebooklm-py) and [`terminal-notifier`](https://github.com/julienXX/terminal-notifier) for uploads and desktop notifications. Logs are written to `~/.ft-bookmarks/sync.log`.
+
 ## Data
 
 All data is stored locally at `~/.ft-bookmarks/`:
@@ -81,8 +154,10 @@ All data is stored locally at `~/.ft-bookmarks/`:
 ```
 ~/.ft-bookmarks/
   bookmarks.jsonl         # raw bookmark cache (one per line)
-  bookmarks.db            # SQLite FTS5 search index
+  likes.jsonl             # raw likes cache (one per line)
+  bookmarks.db            # SQLite FTS5 search index (bookmarks + likes)
   bookmarks-meta.json     # sync metadata
+  likes-backfill-state.json  # likes sync state
   oauth-token.json        # OAuth token (if using API mode, chmod 600)
 ```
 

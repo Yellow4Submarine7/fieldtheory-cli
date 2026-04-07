@@ -7,6 +7,8 @@ import { pbkdf2Sync, createDecipheriv, randomUUID } from 'node:crypto';
 export interface ChromeCookieResult {
   csrfToken: string;
   cookieHeader: string;
+  /** Twitter user ID extracted from the twid cookie, if available. */
+  userId?: string;
 }
 
 function getMacOSChromeKey(): Buffer {
@@ -187,9 +189,9 @@ export function extractChromeXCookies(
   const dbPath = join(chromeUserDataDir, profileDirectory, 'Cookies');
   const key = getMacOSChromeKey();
 
-  let result = queryCookies(dbPath, '.x.com', ['ct0', 'auth_token']);
+  let result = queryCookies(dbPath, '.x.com', ['ct0', 'auth_token', 'twid']);
   if (result.cookies.length === 0) {
-    result = queryCookies(dbPath, '.twitter.com', ['ct0', 'auth_token']);
+    result = queryCookies(dbPath, '.twitter.com', ['ct0', 'auth_token', 'twid']);
   }
 
   const decrypted = new Map<string, string>();
@@ -225,5 +227,14 @@ export function extractChromeXCookies(
   if (authToken) cookieParts.push(`auth_token=${sanitizeCookieValue('auth_token', authToken)}`);
   const cookieHeader = cookieParts.join('; ');
 
-  return { csrfToken: sanitizeCookieValue('ct0', ct0), cookieHeader };
+  // Extract user ID from twid cookie (format: "u=123456789" or URL-encoded "u%3D123456789")
+  const twid = decrypted.get('twid');
+  let userId: string | undefined;
+  if (twid) {
+    const decoded = decodeURIComponent(twid);
+    const match = decoded.match(/u=(\d+)/);
+    if (match) userId = match[1];
+  }
+
+  return { csrfToken: sanitizeCookieValue('ct0', ct0), cookieHeader, userId };
 }
